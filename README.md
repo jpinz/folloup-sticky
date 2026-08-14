@@ -80,3 +80,38 @@ Followup runs on the reTerminal Sticky hardware.
 The value of Followup is a quiet, always-visible place to catch your thoughts and keep the important ones in front of you. Instead of losing an idea to a forgotten note app or burying a task in a notification stream, you speak it in the moment, let Gemini turn it into clean text and a summary, and keep everything private on your SD card.
 
 Ideas get a vibe check so you only carry forward what still matters. Tasks and notes become follow-ups so you stay on track. And the ones you care about most sit on the ePaper as stickies — a steady, low-interruption reminder of what's next.
+
+## Build and Flash the Firmware
+
+Install [ESP-IDF 5.5.4](https://docs.espressif.com/projects/esp-idf/en/v5.5.4/esp32s3/get-started/index.html), then load its tools in your terminal:
+
+```bash
+source /path/to/esp-idf/export.sh
+cd /path/to/folloup-sticky
+idf.py set-target esp32s3
+idf.py build
+```
+
+Connect the Sticky over USB and flash it:
+
+```bash
+idf.py -p /dev/ttyUSB0 flash monitor
+```
+
+Replace `/dev/ttyUSB0` with the Sticky's serial port. On macOS, the port usually resembles `/dev/tty.usbmodem...`. Press `Ctrl+]` to leave the serial monitor.
+
+Build files are written to `build/`. The flash command automatically writes the bootloader, partition table, and application to the correct locations.
+
+Do not put Wi-Fi passwords or API keys in `sdkconfig.defaults`. Configure them through the device at runtime so they are not committed to the repository.
+
+## Download a CI Build
+
+The `Firmware` GitHub Actions workflow builds the firmware for pull requests, pushes to `main`, and manual runs. Open a completed workflow run, then download the `folloup-sticky-firmware` artifact from its **Artifacts** section.
+
+After extracting the artifact, load ESP-IDF 5.5.4 and flash the included files from the extracted directory:
+
+```bash
+esptool.py --chip esp32s3 -p /dev/ttyUSB0 write_flash @flash_args
+```
+
+CI produces files that can be downloaded and flashed locally; it cannot flash a physical Sticky itself.
