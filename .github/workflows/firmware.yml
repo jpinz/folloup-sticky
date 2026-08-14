@@ -1,0 +1,43 @@
+name: Firmware
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ESP32-S3 firmware
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.5.4
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Select ESP32-S3 target
+        run: idf.py set-target esp32s3
+
+      - name: Build firmware
+        run: idf.py build
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: folloup-sticky-firmware
+          if-no-files-found: error
+          path: |
+            build/folloup_sticky.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/ota_data_initial.bin
+            build/flash_args
+            build/flash_project_args
+            build/flasher_args.json
