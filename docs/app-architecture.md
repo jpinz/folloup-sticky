@@ -44,6 +44,13 @@ onboarding, and a set of feature pages plus overlays) built on:
   settings/runtime state.
 - A `gemini_service` component that owns Gemini API key settings precedence,
   backend HTTP routes, and Gemini authentication readiness state.
+- A `localai_service` component that owns LocalAI (self-hosted,
+  OpenAI-compatible) settings precedence, backend HTTP routes, and LocalAI
+  readiness state, mirroring `gemini_service`'s shape for its own provider.
+- An `ai_service` component that owns the provider-neutral AI layer: which of
+  `gemini_service` / `localai_service` is the active provider, backend routes
+  for provider selection, and dispatch of text-generation/token-count/
+  transcription calls to whichever provider is active.
 - An input-only `pdm_mic` component that owns ESP-IDF I2S PDM RX capture.
 - A `microphone_service` component that owns Sticky microphone pin mapping,
   microphone power/read lifecycle, and input-level calculation.
@@ -56,8 +63,9 @@ onboarding, and a set of feature pages plus overlays) built on:
   (listing, metadata, follow-up flags) surfaced by the Notes/Todos/Follow-up
   pages and the sticky-note overlay.
 - A `transcription_service` and a `summary_service` component that own the
-  Gemini-backed transcription and summary flows respectively (these live in
-  their own components, not inside `gemini_service`).
+  transcription and summary flows respectively, calling the provider-neutral
+  `ai_service` layer rather than `gemini_service` directly (these live in
+  their own components, not inside `gemini_service`/`localai_service`).
 - A `shared_bus_service` component that serializes the shared SPI2 bus between
   the SD card and the e-paper panel (`StorageBusGuard` / `DisplayBusGuard`).
 - A ported mono SSD1677 e-paper panel driver.
@@ -203,6 +211,14 @@ components/
     include/
       gemini_service.h
     gemini_service.cpp
+  localai_service/
+    include/
+      localai_service.h
+    localai_service.cpp
+  ai_service/
+    include/
+      ai_service.h
+    ai_service.cpp
   wifi_service/
     include/
       wifi_service.h
@@ -296,6 +312,7 @@ sdkconfig
 sdkconfig.defaults
 docs/
   app-architecture.md
+  ai-provider-service.md
   asset-generation.md
   auto-sleep.md
   gemini-service.md
@@ -485,8 +502,8 @@ Its job is to compose product state into UI-facing data contracts that
 
 The current app-runtime helpers under `main/` are:
 
-- `status_bar_runtime`: compose Wi-Fi, Gemini, battery, sleep, and shutdown
-  state into `epaper_ui::StatusBarState`
+- `status_bar_runtime`: compose Wi-Fi, AI-provider, battery, sleep, and
+  shutdown state into `epaper_ui::StatusBarState`
 - `footer_runtime`: project footer layout and shared page focus into
   `epaper_ui::GlobalFooterState` (Settings/WiFi/Time/Folder/Sticky/Home + Mic)
 - `overlay_runtime`: own retained overlay state (card modal, select modal,

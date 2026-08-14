@@ -40,9 +40,9 @@ struct ActivateCallbacks {
     std::function<void()> request_todos_summary;
 };
 
-// gemini_ready gates the Get-summary action: when Gemini isn't connected the tap is a no-op
-// (the scroll container already shows the "Connect to Gemini" hint).
-ActivateResult HandlePrimaryActivate(SummarizePageCoordinator& coordinator, bool gemini_ready);
+// provider_ready gates the Get-summary action: when no AI provider is connected the tap is a
+// no-op (the scroll container already shows the "Connect an AI provider" hint).
+ActivateResult HandlePrimaryActivate(SummarizePageCoordinator& coordinator, bool provider_ready);
 void ApplyPrimaryActivateResult(const ActivateResult& result, const ActivateCallbacks& callbacks);
 FocusMoveResult HandleMoveFocus(SummarizePageCoordinator& coordinator, int delta);
 

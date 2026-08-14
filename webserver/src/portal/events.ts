@@ -2,9 +2,16 @@ import type { PortalDom } from './dom';
 import type { StatusType, ValidatableField } from './types';
 
 interface PortalEventControllers {
+  aiProviderController: {
+    handleProviderChange: () => void;
+  };
   geminiController: {
     clearGeminiKey: () => Promise<void>;
     saveGeminiKey: () => Promise<void>;
+  };
+  localAiController: {
+    resetSettings: () => Promise<void>;
+    saveSettings: () => Promise<void>;
   };
   timeController: {
     clearTimezoneLocation: () => Promise<void>;
@@ -88,6 +95,24 @@ export function bindPortalEvents(deps: BindPortalEventsDeps) {
     runWithButtonFocus(dom.geminiClearBtn, () => controllers.geminiController.clearGeminiKey());
   });
   dom.geminiApiKeyInput.addEventListener('input', helpers.updateUi);
+
+  // --- AI provider selection ---
+  dom.aiProviderSelect.addEventListener('change', () => {
+    controllers.aiProviderController.handleProviderChange();
+  });
+
+  // --- LocalAI settings ---
+  dom.localAiSaveBtn.addEventListener('click', () => {
+    runWithButtonFocus(dom.localAiSaveBtn, () => controllers.localAiController.saveSettings());
+  });
+  dom.localAiResetBtn.addEventListener('click', () => {
+    runWithButtonFocus(dom.localAiResetBtn, () => controllers.localAiController.resetSettings());
+  });
+  dom.localAiBaseUrlInput.addEventListener('input', helpers.updateUi);
+  dom.localAiTextModelInput.addEventListener('input', helpers.updateUi);
+  dom.localAiTranscriptionModelInput.addEventListener('input', helpers.updateUi);
+  dom.localAiApiKeyInput.addEventListener('input', helpers.updateUi);
+  dom.localAiContextLimitInput.addEventListener('input', helpers.updateUi);
 
   // --- Time / timezone ---
   dom.timezoneLocationSaveBtn.addEventListener('click', () => {

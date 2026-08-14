@@ -133,7 +133,7 @@ void PlayPatternBlocking(Pattern pattern)
         {784, 40, 40},
         {1047, 40, 0},
     };
-    constexpr ToneStep kGeminiConnected[] = {
+    constexpr ToneStep kAiProviderConnected[] = {
         {1175, 40, 30},
         {1568, 40, 30},
         {2093, 40, 0},
@@ -177,9 +177,9 @@ void PlayPatternBlocking(Pattern pattern)
         case Pattern::kStartup:
             PlaySteps(kStartup, sizeof(kStartup) / sizeof(kStartup[0]));
             break;
-        case Pattern::kGeminiConnected:
-            PlaySteps(kGeminiConnected,
-                      sizeof(kGeminiConnected) / sizeof(kGeminiConnected[0]));
+        case Pattern::kAiProviderConnected:
+            PlaySteps(kAiProviderConnected,
+                      sizeof(kAiProviderConnected) / sizeof(kAiProviderConnected[0]));
             break;
         case Pattern::kLock:
             PlaySteps(kLock, sizeof(kLock) / sizeof(kLock[0]));

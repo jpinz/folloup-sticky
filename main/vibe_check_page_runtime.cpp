@@ -453,7 +453,7 @@ void TranscribeCurrentIdea()
     auto* recording_id_arg = new std::string(std::move(recording_id));
     const BaseType_t created = xTaskCreatePinnedToCore(
         TranscribeWorker, "vibe_txcribe", kTranscribeWorkerStackWords, recording_id_arg,
-        followup_task_config::kPriorityGemini, nullptr, followup_task_config::kAppCore);
+        followup_task_config::kPriorityAiProvider, nullptr, followup_task_config::kAppCore);
     if (created != pdPASS) {
         delete recording_id_arg;
         s_transcribe_worker_active.store(false, std::memory_order_release);

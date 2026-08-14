@@ -25,6 +25,9 @@ inline constexpr UBaseType_t kPriorityWifiCallbacks = 3;
 inline constexpr UBaseType_t kPriorityStorage = 2;
 inline constexpr UBaseType_t kPriorityTimezoneSync = 2;
 inline constexpr UBaseType_t kPriorityGemini = 2;
+// Shared by the provider-neutral AI layer's own worker tasks (e.g. LocalAI readiness checks)
+// so every AI-provider worker runs at the same priority regardless of which backend is active.
+inline constexpr UBaseType_t kPriorityAiProvider = kPriorityGemini;
 // Background battery/RTC telemetry poll. Low priority on purpose: it caches
 // last-good values off the UI path, so a poll that loses a race to SD/display
 // bus activity simply retries on the next cycle without ever blocking a refresh.

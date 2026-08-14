@@ -1,7 +1,11 @@
 # Gemini Service
 
 This document describes the current Gemini integration used by the Sticky
-firmware.
+firmware. Gemini is one of two AI providers the firmware supports; see
+[`docs/ai-provider-service.md`](ai-provider-service.md) for the
+provider-neutral layer (`ai_service`) and the LocalAI alternative
+(`localai_service`) that sits alongside it. This document only covers
+`gemini_service` itself, which is unchanged by that addition.
 
 `components/gemini_service/` currently owns:
 
@@ -9,19 +13,26 @@ firmware.
 - Gemini authentication state
 - backend HTTP routes for Gemini settings and runtime state
 - Wi-Fi-driven Gemini readiness
-- Gemini-ready status consumed by the status bar
+- Gemini-ready status consumed by the status bar (through `ai_service`, which
+  is the layer that now actually calls `gemini_service` on the app's behalf)
 
 It does not own:
 
 - transcription requests — owned by the `transcription_service` component
-- summary generation — owned by the `summary_service` component
+  (which calls the provider-neutral `ai_service` layer, not `gemini_service`
+  directly)
+- summary generation — owned by the `summary_service` component (same:
+  calls `ai_service`, not `gemini_service`, directly)
 - archived recording enrichment / indexing — owned by
   `recording_archive_service`
 - a frontend portal UI
+- provider selection — owned by `ai_service`, which decides whether Gemini or
+  LocalAI is the active provider
 
-`transcription_service` and `summary_service` call the Gemini API directly; they
-were split into their own components rather than living inside `gemini_service`,
-which remains focused on key/settings precedence, auth readiness, and status.
+`transcription_service` and `summary_service` call the provider-neutral
+`ai_service` layer, which in turn calls the Gemini API directly when Gemini is
+the active provider; `gemini_service` itself remains focused on key/settings
+precedence, auth readiness, and status, exactly as before this layer existed.
 
 ## Ownership
 
@@ -30,22 +41,32 @@ Current runtime split:
 - `gemini_service`
   - Gemini configuration, API key precedence, auth requests, auth state, and
     backend route handlers
+- `ai_service`
+  - initializes `gemini_service` (alongside `localai_service`), forwards
+    Wi-Fi network state into it, registers its portal routes, and dispatches
+    to it when Gemini is the active provider (see
+    `docs/ai-provider-service.md`)
 - `wifi_service`
-  - owns the backend HTTP server and hosts Gemini routes through the existing
-    portal route registrar
+  - owns the backend HTTP server and hosts Gemini's (and LocalAI's and
+    `ai_service`'s) routes through the existing portal route registrar
 - `main/app_shell.cpp`
-  - initializes the service, forwards Wi-Fi network state into Gemini, logs
-    Gemini events, and triggers the Gemini-connected sound cue
+  - initializes `ai_service` (not `gemini_service` directly), logs the
+    neutral AI-provider event, and triggers the AI-provider-connected sound
+    cue
 - `main/status_bar_runtime.cpp`
-  - reflects Gemini-ready state into `epaper_ui::StatusBarState`
+  - reflects `ai_service::IsReady()` into `epaper_ui::StatusBarState`
+    (ready when the *active* provider — Gemini or LocalAI — is ready)
 - `components/epaper_ui/`
-  - renders the Gemini-ready star icon in the status bar
+  - renders the ready-state star icon in the status bar (the field/asset
+    names still say "Gemini" but the icon now represents the active AI
+    provider generally)
 - `feedback_service` / `buzzer_service`
-  - play a dedicated Gemini-connected cue when readiness transitions from false
-    to true
+  - play a dedicated AI-provider-connected cue when readiness transitions
+    from false to true
 
-`app_shell` remains an orchestrator here. The Gemini service owns the provider
-state and route behavior; `app_shell` only wires events, startup order, and
+`app_shell` remains an orchestrator here. The Gemini service owns Gemini's own
+provider state and route behavior; `ai_service` owns which provider is active
+and dispatches to it; `app_shell` only wires events, startup order, and
 product-facing reactions.
 
 ## Internal Layout

@@ -67,6 +67,21 @@
           </ui-button>
         </ui-bottom-sheet>
 
+        <ui-card id="aiProviderCard" title="AI Provider">
+            <ui-select
+              id="aiProviderSelect"
+              label="Provider"
+              aria-label="AI Provider"
+            >
+              <option value="gemini">Gemini</option>
+              <option value="localai">LocalAI (self-hosted)</option>
+            </ui-select>
+            <p class="form-helper-text">
+              Choose whether transcription and summaries use Google Gemini or a self-hosted
+              OpenAI-compatible LocalAI server.
+            </p>
+        </ui-card>
+
         <ui-card id="geminiCard" title="Gemini API Key">
             <ui-input
               id="geminiApiKeyInput"
@@ -86,6 +101,67 @@
             <ui-button
               slot="footer"
               id="geminiSaveBtn"
+              variant="primary"
+            >
+              Save
+            </ui-button>
+        </ui-card>
+
+        <ui-card id="localAiCard" title="LocalAI Settings">
+            <ui-input
+              id="localAiBaseUrlInput"
+              label="Base URL"
+              placeholder="http://192.168.1.20:8080/v1"
+              autocomplete="off"
+              inputmode="url"
+            ></ui-input>
+
+            <ui-input
+              id="localAiTextModelInput"
+              label="Text Model"
+              placeholder="gpt-4"
+              autocomplete="off"
+              inputmode="text"
+            ></ui-input>
+
+            <ui-input
+              id="localAiTranscriptionModelInput"
+              label="Transcription Model"
+              placeholder="whisper-1"
+              autocomplete="off"
+              inputmode="text"
+            ></ui-input>
+
+            <ui-input
+              id="localAiApiKeyInput"
+              label="API Key (optional)"
+              placeholder="Enter LocalAI API key"
+              autocomplete="off"
+              inputmode="text"
+            ></ui-input>
+
+            <ui-input
+              id="localAiContextLimitInput"
+              label="Context Limit (tokens)"
+              placeholder="8192"
+              inputmode="numeric"
+            ></ui-input>
+
+            <p class="form-helper-text">
+              Point this at any OpenAI-compatible server's API root (commonly ending in
+              <code>/v1</code>). The API key is optional and stored masked once saved.
+            </p>
+
+            <ui-button
+              slot="footer"
+              id="localAiResetBtn"
+              variant="secondary"
+            >
+              Reset
+            </ui-button>
+            <ui-button
+              slot="footer"
+              id="localAiSaveBtn"
               variant="primary"
             >
               Save

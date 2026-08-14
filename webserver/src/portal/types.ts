@@ -113,6 +113,61 @@ export interface SleepStatusResponse {
 
 export type ModuleId = 'core' | 'classic' | 'xiaozhi' | 'gemini' | 'openai';
 
+// --- Provider-neutral AI layer + LocalAI (self-hosted, OpenAI-compatible) ---
+
+export type AiProviderId = 'gemini' | 'localai';
+
+export interface AiProviderSettings {
+  provider?: AiProviderId;
+  default_provider?: AiProviderId;
+  has_stored_provider?: boolean;
+}
+
+export interface AiProviderRuntime {
+  ready?: boolean;
+  provider?: AiProviderId;
+  status_message?: string;
+}
+
+export interface AiProviderResponse {
+  success: boolean;
+  message?: string;
+  settings?: AiProviderSettings;
+  runtime?: AiProviderRuntime;
+}
+
+export interface LocalAiSettings {
+  configured?: boolean;
+  base_url?: string;
+  text_model?: string;
+  transcription_model?: string;
+  has_stored_api_key?: boolean;
+  has_sdkconfig_api_key?: boolean;
+  api_key_source?: string;
+  api_key_last4?: string;
+  context_limit?: number;
+}
+
+export interface LocalAiRuntime {
+  initialized?: boolean;
+  ready?: boolean;
+  request_in_flight?: boolean;
+  readiness_checked?: boolean;
+  reachable?: boolean;
+  last_http_status?: number;
+  last_status_message?: string;
+  last_error_code?: string;
+  last_error_message?: string;
+  model_count?: number;
+}
+
+export interface LocalAiResponse {
+  success: boolean;
+  message?: string;
+  settings?: LocalAiSettings;
+  runtime?: LocalAiRuntime;
+}
+
 export interface BootstrapResponse {
   success: boolean;
   message?: string;
@@ -132,13 +187,17 @@ export interface ModuleRoutes {
 }
 
 export interface GeminiModuleSettings {
-  has_key?: boolean;
-  last4?: string;
+  configured?: boolean;
+  has_stored_api_key?: boolean;
+  has_sdkconfig_api_key?: boolean;
+  api_key_source?: string;
+  api_key_last4?: string;
+  model_name?: string;
 }
 
 export interface OpenAiModuleSettings {
-  has_key?: boolean;
-  last4?: string;
+  has_stored_api_key?: boolean;
+  api_key_last4?: string;
   resumption_available?: boolean;
 }
 

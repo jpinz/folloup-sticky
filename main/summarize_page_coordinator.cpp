@@ -7,7 +7,7 @@ namespace {
 using page_navigation::NavigationItemRole;
 
 constexpr int kScrollStepPercent = 10;
-constexpr const char* kConnectToGeminiMessage = "Connect to Gemini for summaries";
+constexpr const char* kConnectAiProviderMessage = "Connect an AI provider for summaries";
 constexpr const char* kEmptyStateMessage = "Summarize your thoughts";
 
 }  // namespace
@@ -122,7 +122,7 @@ bool SummarizePageCoordinator::SelectSegment(int index)
 }
 
 epaper_ui::SummarizePageState SummarizePageCoordinator::BuildState(
-    bool gemini_ready, const summary_service::Snapshot& summary_snapshot) const
+    bool provider_ready, const summary_service::Snapshot& summary_snapshot) const
 {
     epaper_ui::SummarizePageState state = {};
     state.navigation_focus_index = focus_.index();
@@ -136,7 +136,7 @@ epaper_ui::SummarizePageState SummarizePageCoordinator::BuildState(
 
     state.scroll_container.content_text = BuildContentText(summary_snapshot);
     state.scroll_container.empty_state_message =
-        BuildEmptyStateMessage(gemini_ready, summary_snapshot);
+        BuildEmptyStateMessage(provider_ready, summary_snapshot);
     state.scroll_container.focused =
         IsRoleFocused(NavigationItemRole::kSummarizePageScrollContainer) || scroll_container_active_;
     state.scroll_container.active = scroll_container_active_;
@@ -159,7 +159,7 @@ std::string SummarizePageCoordinator::BuildContentText(
 }
 
 std::string SummarizePageCoordinator::BuildEmptyStateMessage(
-    bool gemini_ready, const summary_service::Snapshot& summary_snapshot) const
+    bool provider_ready, const summary_service::Snapshot& summary_snapshot) const
 {
     if (selected_segment_index_ == 0 && summary_snapshot.notes.available) {
         return {};
@@ -167,8 +167,8 @@ std::string SummarizePageCoordinator::BuildEmptyStateMessage(
     if (selected_segment_index_ == 1 && summary_snapshot.todos.available) {
         return {};
     }
-    if (!gemini_ready) {
-        return kConnectToGeminiMessage;
+    if (!provider_ready) {
+        return kConnectAiProviderMessage;
     }
     return kEmptyStateMessage;
 }

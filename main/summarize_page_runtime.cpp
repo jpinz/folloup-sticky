@@ -3,9 +3,9 @@
 #include <climits>
 #include <mutex>
 
+#include "ai_service.h"
 #include "epaper_ui/summarize_page.h"
 #include "esp_log.h"
-#include "gemini_service.h"
 #include "page_navigation/page_focus_projection.h"
 #include "summarize_page_coordinator.h"
 #include "ui_refresh_runtime.h"
@@ -70,8 +70,8 @@ page_navigation::NavigationItemRole FooterRoleForFooterItem(footer_runtime::Foot
 
 epaper_ui::SummarizePageState BuildStateLocked()
 {
-    const bool gemini_ready = gemini_service::GetSnapshot().runtime.ready;
-    return s_coordinator.BuildState(gemini_ready, s_summary_snapshot);
+    const bool provider_ready = ai_service::IsReady();
+    return s_coordinator.BuildState(provider_ready, s_summary_snapshot);
 }
 
 footer_runtime::ProjectionState BuildFooterProjectionStateLocked()
@@ -141,8 +141,8 @@ page_actions::FocusMoveOutcome MoveFocus(int delta)
 summarize_page_interactions::ActivateResult ActivateFocusedItem()
 {
     std::lock_guard<std::mutex> lock(s_mutex);
-    const bool gemini_ready = gemini_service::GetSnapshot().runtime.ready;
-    return summarize_page_interactions::HandlePrimaryActivate(s_coordinator, gemini_ready);
+    const bool provider_ready = ai_service::IsReady();
+    return summarize_page_interactions::HandlePrimaryActivate(s_coordinator, provider_ready);
 }
 
 bool ResolveTouchTarget(int x, int y, app_interaction::InteractiveTarget* target)
@@ -252,7 +252,7 @@ summarize_page_interactions::ActivateResult ActivateTouchTarget(
     if (target.secondary_index != s_interaction_generation) {
         return result;
     }
-    const bool gemini_ready = gemini_service::GetSnapshot().runtime.ready;
+    const bool provider_ready = ai_service::IsReady();
 
     // The segment tab was already selected + entered on touch-down (FocusTouchTarget); the
     // release just needs to consume with a cue. Scroll / button run their normal activation.
@@ -270,7 +270,7 @@ summarize_page_interactions::ActivateResult ActivateTouchTarget(
         return result;
     }
     s_coordinator.SetFocusIndex(s_coordinator.navigation_model().IndexOfRole(role));
-    return summarize_page_interactions::HandlePrimaryActivate(s_coordinator, gemini_ready);
+    return summarize_page_interactions::HandlePrimaryActivate(s_coordinator, provider_ready);
 }
 
 footer_runtime::ProjectionState BuildFooterProjectionState()

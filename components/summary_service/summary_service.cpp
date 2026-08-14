@@ -12,13 +12,13 @@
 #include <utility>
 #include <vector>
 
+#include "ai_service.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "followup_task_config.h"
-#include "gemini_service.h"
 #include "recording_archive_service.h"
 #include "storage_service.h"
 
@@ -97,18 +97,43 @@ size_t EstimateTokenCount(const std::string& text)
     return std::max<size_t>(1U, text.size() / 4U);
 }
 
-// --- gemini wrappers (synchronous; run on the worker task) -----------------
-
-size_t CountPromptTokens(const std::string& prompt)
+// The constants above are sized for Gemini's large context window; cap them down to LocalAI's
+// configurable context limit when LocalAI is the active AI provider so chunking stays inside
+// whatever the operator configured for their self-hosted model.
+//
+// `provider` must be the value pinned once at the start of the logical summary request (see
+// GenerateSummary) and threaded through every helper below. Re-reading the live active provider
+// on each call would let a mid-job provider switch (e.g. via the portal settings API) mix budgets
+// and generation calls from two different backends within the same summary.
+size_t EffectiveInputTokenBudget(ai_service::Provider provider)
 {
-    const gemini_service::TokenCountResult result = gemini_service::CountTokens(prompt);
+    return ai_service::GetContextTokenBudget(provider, static_cast<size_t>(kSummaryInputTokenBudget));
+}
+
+size_t EffectiveChunkTokenBudget(ai_service::Provider provider)
+{
+    return ai_service::GetContextTokenBudget(provider, static_cast<size_t>(kSummaryChunkTokenBudget));
+}
+
+size_t EffectiveRollupTokenBudget(ai_service::Provider provider)
+{
+    return ai_service::GetContextTokenBudget(provider,
+                                             static_cast<size_t>(kSummaryRollupTokenBudget));
+}
+
+// --- AI provider wrappers (synchronous; run on the worker task) ------------
+
+size_t CountPromptTokens(ai_service::Provider provider, const std::string& prompt)
+{
+    const ai_service::TokenCountResult result = ai_service::CountTokens(provider, prompt);
     return result.success ? static_cast<size_t>(result.total_tokens) : EstimateTokenCount(prompt);
 }
 
-bool GeneratePromptTextResult(const std::string& prompt, std::string* text_out,
-                              std::string* error_code_out, std::string* error_message_out)
+bool GeneratePromptTextResult(ai_service::Provider provider, const std::string& prompt,
+                              std::string* text_out, std::string* error_code_out,
+                              std::string* error_message_out)
 {
-    const gemini_service::TextResult result = gemini_service::GenerateText(prompt);
+    const ai_service::TextResult result = ai_service::GenerateText(provider, prompt);
     const std::string normalized = TrimCopy(result.text);
     if (!result.success || normalized.empty()) {
         if (error_code_out != nullptr) {
@@ -116,7 +141,7 @@ bool GeneratePromptTextResult(const std::string& prompt, std::string* text_out,
         }
         if (error_message_out != nullptr) {
             *error_message_out =
-                result.error_message.empty() ? "Gemini summary request failed" : result.error_message;
+                result.error_message.empty() ? "AI summary request failed" : result.error_message;
         }
         return false;
     }
@@ -271,7 +296,7 @@ size_t FindSplitOffset(const std::string& text)
 }
 
 bool SplitEntryToFitTokenBudget(SummaryKind kind, const SourceEntry& entry, size_t token_budget,
-                                std::vector<SourceEntry>* out)
+                                ai_service::Provider provider, std::vector<SourceEntry>* out)
 {
     if (out == nullptr) {
         return false;
@@ -284,7 +309,8 @@ bool SplitEntryToFitTokenBudget(SummaryKind kind, const SourceEntry& entry, size
 
         SourceEntry candidate = entry;
         candidate.text = text;
-        if (CountPromptTokens(BuildChunkSummaryPrompt(kind, {candidate}, 1, 1)) <= token_budget) {
+        if (CountPromptTokens(provider, BuildChunkSummaryPrompt(kind, {candidate}, 1, 1)) <=
+            token_budget) {
             fragments.push_back(std::move(candidate.text));
             continue;
         }
@@ -318,7 +344,9 @@ bool SplitEntryToFitTokenBudget(SummaryKind kind, const SourceEntry& entry, size
 
 std::vector<std::vector<SourceEntry>> BuildChunkGroups(SummaryKind kind,
                                                        const std::vector<SourceEntry>& entries,
-                                                       size_t token_budget, bool* success_out)
+                                                       size_t token_budget,
+                                                       ai_service::Provider provider,
+                                                       bool* success_out)
 {
     bool success = true;
     std::vector<std::vector<SourceEntry>> chunks;
@@ -331,7 +359,8 @@ std::vector<std::vector<SourceEntry>> BuildChunkGroups(SummaryKind kind,
         }
         std::vector<SourceEntry> trial_chunk = current_chunk;
         trial_chunk.push_back(entry);
-        if (CountPromptTokens(BuildChunkSummaryPrompt(kind, trial_chunk, 1, 1)) <= token_budget) {
+        if (CountPromptTokens(provider, BuildChunkSummaryPrompt(kind, trial_chunk, 1, 1)) <=
+            token_budget) {
             current_chunk = std::move(trial_chunk);
             continue;
         }
@@ -344,7 +373,7 @@ std::vector<std::vector<SourceEntry>> BuildChunkGroups(SummaryKind kind,
 
     for (const std::vector<SourceEntry>& chunk : chunks) {
         if (chunk.empty() ||
-            CountPromptTokens(BuildChunkSummaryPrompt(kind, chunk, 1, 1)) > token_budget) {
+            CountPromptTokens(provider, BuildChunkSummaryPrompt(kind, chunk, 1, 1)) > token_budget) {
             success = false;
             break;
         }
@@ -356,7 +385,8 @@ std::vector<std::vector<SourceEntry>> BuildChunkGroups(SummaryKind kind,
 }
 
 bool SplitSummaryTextForRollup(SummaryKind kind, const std::string& summary_text,
-                               size_t token_budget, std::vector<std::string>* out)
+                               size_t token_budget, ai_service::Provider provider,
+                               std::vector<std::string>* out)
 {
     if (out == nullptr) {
         return false;
@@ -366,7 +396,7 @@ bool SplitSummaryTextForRollup(SummaryKind kind, const std::string& summary_text
     while (!pending.empty()) {
         const std::string text = std::move(pending.front());
         pending.pop_front();
-        if (CountPromptTokens(BuildRollupPrompt(kind, {text}, true)) <= token_budget) {
+        if (CountPromptTokens(provider, BuildRollupPrompt(kind, {text}, true)) <= token_budget) {
             fragments.push_back(text);
             continue;
         }
@@ -390,9 +420,9 @@ bool SplitSummaryTextForRollup(SummaryKind kind, const std::string& summary_text
 }
 
 bool GenerateRollupSummaryRecursive(SummaryKind kind,
-                                    const std::vector<std::string>& partial_summaries, int depth,
-                                    std::string* text_out, std::string* error_code_out,
-                                    std::string* error_message_out)
+                                    const std::vector<std::string>& partial_summaries,
+                                    ai_service::Provider provider, int depth, std::string* text_out,
+                                    std::string* error_code_out, std::string* error_message_out)
 {
     if (partial_summaries.empty()) {
         if (error_code_out != nullptr) {
@@ -405,8 +435,9 @@ bool GenerateRollupSummaryRecursive(SummaryKind kind,
     }
 
     const std::string prompt = BuildRollupPrompt(kind, partial_summaries, false);
-    if (CountPromptTokens(prompt) <= static_cast<size_t>(kSummaryRollupTokenBudget)) {
-        return GeneratePromptTextResult(prompt, text_out, error_code_out, error_message_out);
+    if (CountPromptTokens(provider, prompt) <= EffectiveRollupTokenBudget(provider)) {
+        return GeneratePromptTextResult(provider, prompt, text_out, error_code_out,
+                                        error_message_out);
     }
     if (depth >= kMaxRollupDepth) {
         if (error_code_out != nullptr) {
@@ -421,7 +452,8 @@ bool GenerateRollupSummaryRecursive(SummaryKind kind,
     std::vector<std::string> prepared_summaries;
     for (const std::string& summary : partial_summaries) {
         std::vector<std::string> split_summaries;
-        if (!SplitSummaryTextForRollup(kind, summary, kSummaryChunkTokenBudget, &split_summaries)) {
+        if (!SplitSummaryTextForRollup(kind, summary, EffectiveChunkTokenBudget(provider), provider,
+                                       &split_summaries)) {
             if (error_code_out != nullptr) {
                 *error_code_out = "summary_rollup_split_failed";
             }
@@ -443,8 +475,8 @@ bool GenerateRollupSummaryRecursive(SummaryKind kind,
         }
         std::vector<std::string> trial_batch = current_batch;
         trial_batch.push_back(summary);
-        if (CountPromptTokens(BuildRollupPrompt(kind, trial_batch, true)) <=
-            static_cast<size_t>(kSummaryChunkTokenBudget)) {
+        if (CountPromptTokens(provider, BuildRollupPrompt(kind, trial_batch, true)) <=
+            EffectiveChunkTokenBudget(provider)) {
             current_batch = std::move(trial_batch);
             continue;
         }
@@ -459,14 +491,14 @@ bool GenerateRollupSummaryRecursive(SummaryKind kind,
     merged_partials.reserve(batches.size());
     for (const std::vector<std::string>& batch : batches) {
         std::string merged_text;
-        if (!GeneratePromptTextResult(BuildRollupPrompt(kind, batch, true), &merged_text,
+        if (!GeneratePromptTextResult(provider, BuildRollupPrompt(kind, batch, true), &merged_text,
                                       error_code_out, error_message_out)) {
             return false;
         }
         merged_partials.push_back(std::move(merged_text));
     }
-    return GenerateRollupSummaryRecursive(kind, merged_partials, depth + 1, text_out, error_code_out,
-                                          error_message_out);
+    return GenerateRollupSummaryRecursive(kind, merged_partials, provider, depth + 1, text_out,
+                                          error_code_out, error_message_out);
 }
 
 // --- SD cache persistence ---------------------------------------------------
@@ -697,8 +729,9 @@ std::vector<RecordingEntry> FilterWindowedEntries(const std::vector<RecordingEnt
 
 // Gather source entries from already-transcribed recordings. Audio-only recordings (no
 // transcript yet) are skipped and counted -- summarizing does NOT transcribe on the fly, since
-// that means one blocking Gemini round-trip per recording (slow, and prone to 503/timeout that
-// tanks the whole run). Recordings are transcribed at capture time; ideas via the Vibe Check star.
+// that means one blocking AI-provider round-trip per recording (slow, and prone to 503/timeout
+// that tanks the whole run). Recordings are transcribed at capture time; ideas via the Vibe Check
+// star.
 std::vector<SourceEntry> CollectSourceEntries(SummaryKind kind,
                                               const std::vector<RecordingEntry>& entries,
                                               int* transcript_count_out, int* missing_count_out)
@@ -734,18 +767,19 @@ std::vector<SourceEntry> CollectSourceEntries(SummaryKind kind,
 // --- summary generation -----------------------------------------------------
 
 GenerationResult GenerateChunkedSummary(SummaryKind kind, const std::vector<SourceEntry>& entries,
-                                        CacheMetadata metadata)
+                                        CacheMetadata metadata, ai_service::Provider provider)
 {
     GenerationResult result = {};
     std::vector<SourceEntry> prepared_entries;
     for (const SourceEntry& entry : entries) {
-        if (CountPromptTokens(BuildChunkSummaryPrompt(kind, {entry}, 1, 1)) <=
-            static_cast<size_t>(kSummaryChunkTokenBudget)) {
+        if (CountPromptTokens(provider, BuildChunkSummaryPrompt(kind, {entry}, 1, 1)) <=
+            EffectiveChunkTokenBudget(provider)) {
             prepared_entries.push_back(entry);
             continue;
         }
         std::vector<SourceEntry> fragments;
-        if (!SplitEntryToFitTokenBudget(kind, entry, kSummaryChunkTokenBudget, &fragments)) {
+        if (!SplitEntryToFitTokenBudget(kind, entry, EffectiveChunkTokenBudget(provider), provider,
+                                        &fragments)) {
             result.error_code = "summary_chunk_split_failed";
             result.error_message = "Summary input could not be chunked";
             result.metadata = metadata;
@@ -755,8 +789,8 @@ GenerationResult GenerateChunkedSummary(SummaryKind kind, const std::vector<Sour
     }
 
     bool chunks_valid = false;
-    const std::vector<std::vector<SourceEntry>> chunks =
-        BuildChunkGroups(kind, prepared_entries, kSummaryChunkTokenBudget, &chunks_valid);
+    const std::vector<std::vector<SourceEntry>> chunks = BuildChunkGroups(
+        kind, prepared_entries, EffectiveChunkTokenBudget(provider), provider, &chunks_valid);
     if (!chunks_valid || chunks.empty()) {
         result.error_code = "summary_chunk_failed";
         result.error_message = "Summary input could not be chunked";
@@ -769,6 +803,7 @@ GenerationResult GenerateChunkedSummary(SummaryKind kind, const std::vector<Sour
     for (size_t index = 0; index < chunks.size(); ++index) {
         std::string partial_summary;
         if (!GeneratePromptTextResult(
+                provider,
                 BuildChunkSummaryPrompt(kind, chunks[index], static_cast<int>(index + 1U),
                                         static_cast<int>(chunks.size())),
                 &partial_summary, &result.error_code, &result.error_message)) {
@@ -779,7 +814,7 @@ GenerationResult GenerateChunkedSummary(SummaryKind kind, const std::vector<Sour
     }
 
     std::string final_summary;
-    if (!GenerateRollupSummaryRecursive(kind, partial_summaries, 0, &final_summary,
+    if (!GenerateRollupSummaryRecursive(kind, partial_summaries, provider, 0, &final_summary,
                                         &result.error_code, &result.error_message)) {
         result.metadata = metadata;
         return result;
@@ -799,20 +834,24 @@ GenerationResult GenerateSummary(SummaryKind kind)
 
     ESP_LOGI(kTag, "Generating %s summary", SummaryKindName(kind));
 
-    const gemini_service::Snapshot gemini_snapshot = gemini_service::GetSnapshot();
-    if (!gemini_snapshot.runtime.ready) {
-        result.error_code = "gemini_not_ready";
-        result.error_message = "Gemini is not connected";
-        ESP_LOGW(kTag, "Summary aborted: Gemini not connected");
+    if (!ai_service::IsReady()) {
+        result.error_code = "provider_not_ready";
+        result.error_message = "AI provider is not connected";
+        ESP_LOGW(kTag, "Summary aborted: AI provider not connected");
         return result;
     }
-    if (gemini_service::GetEffectiveApiKey().empty() ||
-        gemini_service::GetEffectiveModelName().empty()) {
-        result.error_code = "gemini_not_configured";
-        result.error_message = "Gemini is not configured";
-        ESP_LOGW(kTag, "Summary aborted: Gemini not configured");
+    if (!ai_service::IsConfigured()) {
+        result.error_code = "provider_not_configured";
+        result.error_message = "AI provider is not configured";
+        ESP_LOGW(kTag, "Summary aborted: AI provider not configured");
         return result;
     }
+
+    // Pin the active provider once for this entire logical summary request. Every token-count
+    // and generation call below (including the chunked map-reduce/rollup path) must use this
+    // same value instead of re-reading the live active provider, so a concurrent provider switch
+    // (e.g. via the portal settings API) can't split one summary across two backends.
+    const ai_service::Provider provider = ai_service::GetActiveProvider();
 
     esp_err_t list_status = ESP_OK;
     const std::vector<RecordingEntry> recordings =
@@ -853,26 +892,27 @@ GenerationResult GenerateSummary(SummaryKind kind)
 
     std::vector<SourceEntry> trimmed_entries = entries;
     std::string prompt = BuildPromptText(kind, trimmed_entries);
-    size_t estimated_tokens = CountPromptTokens(prompt);
-    while (estimated_tokens > static_cast<size_t>(kSummaryInputTokenBudget) &&
+    size_t estimated_tokens = CountPromptTokens(provider, prompt);
+    while (estimated_tokens > EffectiveInputTokenBudget(provider) &&
            trimmed_entries.size() > 1U) {
         metadata.truncated = true;
         trimmed_entries.erase(trimmed_entries.begin());
         prompt = BuildPromptText(kind, trimmed_entries);
-        estimated_tokens = CountPromptTokens(prompt);
+        estimated_tokens = CountPromptTokens(provider, prompt);
     }
 
-    if (estimated_tokens > static_cast<size_t>(kSummaryInputTokenBudget)) {
+    if (estimated_tokens > EffectiveInputTokenBudget(provider)) {
         metadata.truncated = true;
-        ESP_LOGI(kTag, "Summary using chunked map-reduce: tokens=%u budget=%d",
-                 static_cast<unsigned>(estimated_tokens), kSummaryInputTokenBudget);
-        return GenerateChunkedSummary(kind, trimmed_entries, metadata);
+        ESP_LOGI(kTag, "Summary using chunked map-reduce: tokens=%u budget=%u",
+                 static_cast<unsigned>(estimated_tokens),
+                 static_cast<unsigned>(EffectiveInputTokenBudget(provider)));
+        return GenerateChunkedSummary(kind, trimmed_entries, metadata, provider);
     }
 
     ESP_LOGI(kTag, "Summary single-pass request: tokens=%u", static_cast<unsigned>(estimated_tokens));
 
     std::string final_summary;
-    if (!GeneratePromptTextResult(prompt, &final_summary, &result.error_code,
+    if (!GeneratePromptTextResult(provider, prompt, &final_summary, &result.error_code,
                                   &result.error_message)) {
         result.metadata = metadata;
         return result;
@@ -979,7 +1019,7 @@ esp_err_t Init()
                 return ESP_ERR_NO_MEM;
             }
             if (xTaskCreatePinnedToCore(WorkerTask, "summary_service", kWorkerTaskStackWords, nullptr,
-                                        followup_task_config::kPriorityGemini, nullptr,
+                                        followup_task_config::kPriorityAiProvider, nullptr,
                                         followup_task_config::kSystemCore) != pdPASS) {
                 ESP_LOGE(kTag, "Failed to start summary worker");
                 vQueueDelete(s_queue);

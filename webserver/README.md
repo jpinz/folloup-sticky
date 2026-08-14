@@ -5,11 +5,14 @@ is built with TypeScript + Vite and **embedded into the firmware** (see
 [Build & Deploy](#build--deploy-to-firmware)) — it is served by the
 `wifi_service` component's HTTP server while the device is in AP mode.
 
-It is adapted from the byte90 captive portal, stripped down to the three things
+It is adapted from the byte90 captive portal, stripped down to the four things
 Followup provisions:
 
 - **Wi-Fi** — scan, connect, disconnect, and live status
+- **AI provider** — choose Gemini or a self-hosted LocalAI server
 - **Gemini API key** — save / clear
+- **LocalAI settings** — base URL, text model, transcription model, optional
+  API key (masked), and context limit
 - **Time & timezone** — pick a timezone, or set date/time manually
 
 The frontend is organized around:
@@ -21,7 +24,8 @@ The frontend is organized around:
 ## API Endpoints Used By The Portal
 
 These are served by the Followup firmware (`wifi_service`, `timezone_service`,
-`gemini_service`) while the device is in access-point mode.
+`gemini_service`, `localai_service`, `ai_service`) while the device is in
+access-point mode.
 
 WiFi (`wifi_service`)
 
@@ -42,6 +46,23 @@ Gemini (`gemini_service`)
 - `GET /api/settings/gemini`
 - `PATCH /api/settings/gemini`
 - `POST /api/settings/gemini/reset`
+
+LocalAI (`localai_service`)
+
+- `GET /api/settings/localai`
+- `PATCH /api/settings/localai`
+- `POST /api/settings/localai/reset`
+- `GET /api/runtime/localai`
+
+AI provider selection (`ai_service`)
+
+- `GET /api/settings/ai`
+- `PATCH /api/settings/ai`
+- `POST /api/settings/ai/reset`
+- `GET /api/runtime/ai`
+
+See [`docs/ai-provider-service.md`](../docs/ai-provider-service.md) for the
+full contract.
 
 ## Local Development
 
@@ -81,7 +102,7 @@ them with the command above rather than hand-editing.
 
 ```text
 webserver/
-  index.html              # portal markup (WiFi / Gemini / Time cards)
+  index.html              # portal markup (WiFi / AI Provider / Gemini / LocalAI / Time cards)
   src/assets/             # inline SVGs (?raw) incl. followup_logo.svg
   src/components/         # autonomous Web Components
   src/portal/             # feature controllers, API helpers, DOM wiring, types
@@ -104,6 +125,7 @@ components/wifi_service/portal/   # embedded build output served by the firmware
   - `wifi.ts` — WiFi scan/connect/disconnect flow
   - `time.ts` — timezone + manual date/time
   - `providerKeys.ts` — Gemini API key save/clear
+  - `aiProvider.ts` — AI provider selection + LocalAI settings save/reset
   - `dom.ts` — element lookups
   - `events.ts` — DOM event bindings
   - `uiState.ts` — button/input enabled/disabled state
