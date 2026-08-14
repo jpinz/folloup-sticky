@@ -21,10 +21,13 @@ import wifi3BarIcon from './assets/wifi_3bar.svg?raw';
 import wifi4BarIcon from './assets/wifi_4bar.svg?raw';
 import wifiFindIcon from './assets/wifi_find.svg?raw';
 import apiKeyIcon from './assets/api_key.svg?raw';
+import deviceInfoIcon from './assets/device_info.svg?raw';
 import checkIcon from './assets/check.svg?raw';
 import clockIcon from './assets/clock.svg?raw';
 import {
+  fetchAiProviderJson,
   fetchGeminiModuleJson,
+  fetchLocalAiJson,
   fetchPortalJson,
   fetchTimeRuntimeJson,
   fetchTimeSettingsJson,
@@ -33,6 +36,9 @@ import {
 import {
   CLOCK_SYNC_POLL_ATTEMPTS,
   CLOCK_SYNC_POLL_INTERVAL_MS,
+  LOCALAI_RESET_API,
+  LOCALAI_SETTINGS_API,
+  AI_PROVIDER_SETTINGS_API,
   NETWORK_SCAN_POLL_ATTEMPTS,
   NETWORK_SCAN_POLL_INTERVAL_MS,
   STATUS_POLL_ATTEMPTS,
@@ -56,6 +62,7 @@ import {
   svgWithClass,
 } from './portal/uiHelpers';
 import { parseClockTimeInputValue } from './portal/duration';
+import { createAiProviderController, createLocalAiController } from './portal/aiProvider';
 import { createProviderKeysController } from './portal/providerKeys';
 import { createTimeController } from './portal/time';
 import { createWiFiController } from './portal/wifi';
@@ -83,6 +90,8 @@ const dom = createPortalDom();
 
 const setNotification = createLiveRegionNotifier(dom.wifiSettingsNotification);
 const setGeminiNotification = createCardNotifier(dom.geminiCard);
+const setAiProviderNotification = createCardNotifier(dom.aiProviderCard);
+const setLocalAiNotification = createCardNotifier(dom.localAiCard);
 const setTimezoneLocationNotification = createCardNotifier(dom.timezoneLocationCard);
 
 // Detached stand-ins for the byte90-only "talking clock" time controls, which Followup does not
@@ -99,13 +108,36 @@ const stubOpenAiApiKeyInput = document.createElement('input') as unknown as Vali
 function updateUi() {
   updatePortalUiState({
     controllers: {
+      aiProviderController,
       geminiController,
+      localAiController,
       timeController,
       wifiController,
     },
     dom,
   });
 }
+
+const aiProviderController = createAiProviderController({
+  aiProviderSelect: dom.aiProviderSelect,
+  fetchAiProviderJson,
+  notify: setAiProviderNotification,
+  providerSettingsApi: AI_PROVIDER_SETTINGS_API,
+  updateButtons: updateUi,
+});
+
+const localAiController = createLocalAiController({
+  apiKeyInput: dom.localAiApiKeyInput,
+  baseUrlInput: dom.localAiBaseUrlInput,
+  contextLimitInput: dom.localAiContextLimitInput,
+  fetchLocalAiJson,
+  localAiResetApi: LOCALAI_RESET_API,
+  localAiSettingsApi: LOCALAI_SETTINGS_API,
+  notify: setLocalAiNotification,
+  textModelInput: dom.localAiTextModelInput,
+  transcriptionModelInput: dom.localAiTranscriptionModelInput,
+  updateButtons: updateUi,
+});
 
 const geminiController = createProviderKeysController({
   fetchGeminiModuleJson,
@@ -198,7 +230,9 @@ function updatePageFade() {
 function initialize() {
   setIcon(dom.followupLogoEl, followupLogo, 'followup-logo');
   dom.wifiStatusCard.iconSvg = wifiIcon;
+  dom.aiProviderCard.iconSvg = deviceInfoIcon;
   dom.geminiCard.iconSvg = apiKeyIcon;
+  dom.localAiCard.iconSvg = apiKeyIcon;
   dom.timezoneLocationCard.iconSvg = clockIcon;
 
   wifiController.renderNetworkList();
@@ -236,7 +270,9 @@ function initialize() {
 
   bindPortalEvents({
     controllers: {
+      aiProviderController,
       geminiController,
+      localAiController,
       timeController,
       wifiController,
     },
@@ -262,6 +298,8 @@ async function loadInitialStatus() {
     timeController.fetchTimeSettingsStatus(),
     wifiController.checkStatus(),
     loadGeminiSettings(),
+    aiProviderController.fetchStatus(),
+    localAiController.fetchStatus(),
   ]);
 }
 

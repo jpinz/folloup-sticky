@@ -34,7 +34,7 @@ public:
     bool scroll_container_active() const { return scroll_container_active_; }
     int selected_segment_index() const { return selected_segment_index_; }
 
-    epaper_ui::SummarizePageState BuildState(bool gemini_ready,
+    epaper_ui::SummarizePageState BuildState(bool provider_ready,
                                              const summary_service::Snapshot& summary_snapshot) const;
 
     const page_navigation::NavigationModel& navigation_model() const { return navigation_model_; }
@@ -42,7 +42,7 @@ public:
 
 private:
     std::string BuildContentText(const summary_service::Snapshot& summary_snapshot) const;
-    std::string BuildEmptyStateMessage(bool gemini_ready,
+    std::string BuildEmptyStateMessage(bool provider_ready,
                                        const summary_service::Snapshot& summary_snapshot) const;
 
     page_navigation::NavigationModel navigation_model_ =

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "ai_service.h"
 #include "button_input_runtime.h"
 #include "button_service.h"
 #include "device_sleep_service.h"
@@ -22,7 +23,6 @@
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "gemini_service.h"
 #include "imu_service.h"
 #include "input_focus_runtime.h"
 #include "input_runtime_setup.h"
@@ -71,7 +71,7 @@ constexpr TickType_t kPowerButtonReleaseSettleDelay = pdMS_TO_TICKS(500);
 
 TaskHandle_t s_shutdown_task = nullptr;
 std::atomic<bool> s_startup_complete = false;
-std::atomic<bool> s_gemini_ready = false;
+std::atomic<bool> s_ai_provider_ready = false;
 std::atomic<bool> s_up_button_pressed = false;
 std::mutex s_recording_session_feedback_mutex;
 recording_session_service::Phase s_last_recording_session_feedback_phase =
@@ -1146,30 +1146,22 @@ void HandleTimezoneEvent(const timezone_service::Event& event, void*)
 void RegisterWifiBackendRoutes(httpd_handle_t server, void*)
 {
     timezone_service::RegisterPortalRoutes(server);
-    gemini_service::RegisterPortalRoutes(server);
+    ai_service::RegisterPortalRoutes(server);
 }
 
-void HandleGeminiEvent(const gemini_service::Event& event, void*)
+void HandleAiEvent(const ai_service::Event& event, void*)
 {
-    ESP_LOGI(kTag,
-             "Gemini intent: configured=%d source=%s ready=%d auth_checked=%d in_flight=%d http=%d status=%s error=%s",
-             event.snapshot.settings.configured ? 1 : 0,
-             gemini_service::ApiKeySourceName(event.snapshot.settings.api_key_source),
+    ESP_LOGI(kTag, "AI provider intent: provider=%s ready=%d status=%s",
+             ai_service::ProviderName(event.snapshot.settings.provider),
              event.snapshot.runtime.ready ? 1 : 0,
-             event.snapshot.runtime.auth_checked ? 1 : 0,
-             event.snapshot.runtime.request_in_flight ? 1 : 0,
-             event.snapshot.runtime.last_http_status,
-             event.snapshot.runtime.last_status_message.empty()
+             event.snapshot.runtime.status_message.empty()
                  ? "<none>"
-                 : event.snapshot.runtime.last_status_message.c_str(),
-             event.snapshot.runtime.last_error_code.empty()
-                 ? "<none>"
-                 : event.snapshot.runtime.last_error_code.c_str());
+                 : event.snapshot.runtime.status_message.c_str());
 
     const bool ready = event.snapshot.runtime.ready;
-    const bool was_ready = s_gemini_ready.exchange(ready, std::memory_order_relaxed);
+    const bool was_ready = s_ai_provider_ready.exchange(ready, std::memory_order_relaxed);
     if (ready && !was_ready) {
-        PlayFeedback(feedback_service::FeedbackEvent::kGeminiConnected);
+        PlayFeedback(feedback_service::FeedbackEvent::kAiProviderConnected);
     }
 
     const esp_err_t status_bar_err =
@@ -1178,7 +1170,7 @@ void HandleGeminiEvent(const gemini_service::Event& event, void*)
                   display_service::RefreshMode::kPartial)
             : status_bar_runtime::UpdateDisplayState();
     if (status_bar_err != ESP_OK && status_bar_err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(kTag, "Status bar update after Gemini event failed: %s",
+        ESP_LOGW(kTag, "Status bar update after AI provider event failed: %s",
                  esp_err_to_name(status_bar_err));
     }
 }
@@ -1198,8 +1190,7 @@ void HandleWifiEvent(const wifi_service::Event& event, void*)
              event.ui_state.ap_url.empty() ? "<none>" : event.ui_state.ap_url.c_str(),
              event.ui_state.rssi);
     timezone_service::SetNetworkConnected(event.ui_state.connected);
-    gemini_service::SetNetworkState(event.ui_state.connected,
-                                    event.ui_state.access_point_mode);
+    ai_service::SetNetworkState(event.ui_state.connected, event.ui_state.access_point_mode);
 
     const esp_err_t status_bar_err =
         s_startup_complete.load(std::memory_order_relaxed)
@@ -1646,12 +1637,12 @@ void InitRecordingArchiveService()
     recording_archive_service::Init();
 }
 
-void InitGeminiService()
+void InitAiService()
 {
-    gemini_service::SetEventHandler(HandleGeminiEvent, nullptr);
-    const esp_err_t err = gemini_service::Init();
+    ai_service::SetEventHandler(HandleAiEvent, nullptr);
+    const esp_err_t err = ai_service::Init();
     if (err != ESP_OK) {
-        ESP_LOGW(kTag, "Gemini service init failed: %s", esp_err_to_name(err));
+        ESP_LOGW(kTag, "AI provider service init failed: %s", esp_err_to_name(err));
     }
 }
 
@@ -1804,7 +1795,7 @@ void Run()
     InitDeviceSleepRuntime();
     InitTimezoneService();
     InitRecordingArchiveService();
-    InitGeminiService();
+    InitAiService();
     InitWifiService();
     InitRecordingService();
     InitTranscriptionService();

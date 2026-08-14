@@ -60,6 +60,59 @@ menu "Folloup Settings"
             Gemini API key stored through the backend portal takes precedence
             when present.
 
+    config FOLLOWUP_AI_PROVIDER
+        string "Default AI provider (gemini or localai)"
+        default "gemini"
+        help
+            Selects which backend the provider-neutral AI layer uses by
+            default: "gemini" for Google Gemini or "localai" for a
+            self-hosted OpenAI-compatible LocalAI server. A runtime-saved
+            provider selection stored through the backend portal takes
+            precedence when present.
+
+    config FOLLOWUP_LOCALAI_BASE_URL
+        string "Built-in LocalAI base URL"
+        default ""
+        help
+            Optional built-in LocalAI server base URL, including the
+            OpenAI-compatible API prefix (e.g. http://192.168.1.20:8080/v1).
+            A runtime-saved base URL stored through the backend portal takes
+            precedence when present.
+
+    config FOLLOWUP_LOCALAI_TEXT_MODEL
+        string "Built-in LocalAI text model"
+        default "gpt-4"
+        help
+            Optional built-in LocalAI chat-completions model name. A
+            runtime-saved text model stored through the backend portal takes
+            precedence when present.
+
+    config FOLLOWUP_LOCALAI_TRANSCRIPTION_MODEL
+        string "Built-in LocalAI transcription model"
+        default "whisper-1"
+        help
+            Optional built-in LocalAI audio-transcriptions model name. A
+            runtime-saved transcription model stored through the backend
+            portal takes precedence when present.
+
+    config FOLLOWUP_LOCALAI_API_KEY
+        string "Built-in LocalAI API key"
+        default ""
+        help
+            Optional built-in LocalAI API key for servers configured to
+            require one. A runtime-saved key stored through the backend
+            portal takes precedence when present.
+
+    config FOLLOWUP_LOCALAI_CONTEXT_LIMIT
+        int "Built-in LocalAI context window (tokens)"
+        range 256 1000000
+        default 8192
+        help
+            Default context-window budget, in tokens, used to cap prompt
+            sizing when LocalAI is the active AI provider. A runtime-saved
+            context limit stored through the backend portal takes precedence
+            when present.
+
     config FOLLOWUP_AUTO_SLEEP_DISPLAY_SLEEP_TIMEOUT_SECONDS
         int "Display sleep timeout"
         range 0 86400

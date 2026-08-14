@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 type ProviderInput = ValidatableField & { readOnly: boolean };
-type ProviderSettings = { has_key?: boolean; last4?: string };
+type ProviderSettings = { has_stored_api_key?: boolean; api_key_last4?: string };
 type ProviderResponse = {
   message?: string;
   settings?: ProviderSettings;
@@ -46,8 +46,8 @@ function applyProviderSettings(
   input: ProviderInput,
   settings?: ProviderSettings
 ) {
-  state.hasKey = settings?.has_key === true;
-  state.last4 = typeof settings?.last4 === 'string' ? settings.last4 : '';
+  state.hasKey = settings?.has_stored_api_key === true;
+  state.last4 = typeof settings?.api_key_last4 === 'string' ? settings.api_key_last4 : '';
   input.value = state.hasKey
     ? state.last4
       ? `******${state.last4}`

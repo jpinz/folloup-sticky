@@ -9,7 +9,7 @@ namespace buzzer_service {
 
 enum class Pattern {
     kStartup,
-    kGeminiConnected,
+    kAiProviderConnected,
     kLock,
     kUnlock,
     kRecordingStart,

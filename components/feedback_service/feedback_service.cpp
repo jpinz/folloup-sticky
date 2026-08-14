@@ -14,8 +14,8 @@ buzzer_service::Pattern PatternForEvent(FeedbackEvent event)
     switch (event) {
         case FeedbackEvent::kStartup:
             return buzzer_service::Pattern::kStartup;
-        case FeedbackEvent::kGeminiConnected:
-            return buzzer_service::Pattern::kGeminiConnected;
+        case FeedbackEvent::kAiProviderConnected:
+            return buzzer_service::Pattern::kAiProviderConnected;
         case FeedbackEvent::kLock:
             return buzzer_service::Pattern::kLock;
         case FeedbackEvent::kUnlock:
@@ -44,8 +44,8 @@ const char* FeedbackEventName(FeedbackEvent event)
     switch (event) {
         case FeedbackEvent::kStartup:
             return "startup";
-        case FeedbackEvent::kGeminiConnected:
-            return "gemini_connected";
+        case FeedbackEvent::kAiProviderConnected:
+            return "ai_provider_connected";
         case FeedbackEvent::kLock:
             return "lock";
         case FeedbackEvent::kUnlock:

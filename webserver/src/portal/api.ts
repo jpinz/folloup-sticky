@@ -1,10 +1,12 @@
 import { API_HEADERS } from './constants';
 import type {
+  AiProviderResponse,
   AudioStatusResponse,
   BootstrapResponse,
   DisplayStatusResponse,
   EffectsStatusResponse,
   GeminiModuleResponse,
+  LocalAiResponse,
   OpenAiModuleResponse,
   PortalResponse,
   PowerRuntimeStatus,
@@ -71,6 +73,10 @@ export const fetchGeminiModuleJson = (path: string, init?: RequestInit) =>
   fetchApiJson<GeminiModuleResponse>(path, init);
 export const fetchOpenAiModuleJson = (path: string, init?: RequestInit) =>
   fetchApiJson<OpenAiModuleResponse>(path, init);
+export const fetchAiProviderJson = (path: string, init?: RequestInit) =>
+  fetchApiJson<AiProviderResponse>(path, init);
+export const fetchLocalAiJson = (path: string, init?: RequestInit) =>
+  fetchApiJson<LocalAiResponse>(path, init);
 export const fetchXiaozhiModuleJson = (path: string, init?: RequestInit) =>
   fetchApiJson<XiaozhiModuleResponse>(path, init);
 export const fetchTimezoneListJson = (path: string, init?: RequestInit) =>

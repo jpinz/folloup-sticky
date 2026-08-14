@@ -7,7 +7,7 @@ namespace feedback_service {
 
 enum class FeedbackEvent {
     kStartup,
-    kGeminiConnected,
+    kAiProviderConnected,
     kLock,
     kUnlock,
     kRecordingStart,

@@ -1,9 +1,15 @@
 import type { PortalDom } from './dom';
 
 interface PortalUiStateControllers {
+  aiProviderController: {
+    isBusy: () => boolean;
+  };
   geminiController: {
     getGeminiHasKey: () => boolean;
     isGeminiBusy: () => boolean;
+  };
+  localAiController: {
+    isBusy: () => boolean;
   };
   timeController: {
     isClockBusy: () => boolean;
@@ -85,4 +91,22 @@ export function updatePortalUiState(deps: UpdatePortalUiStateDeps) {
   dom.geminiSaveBtn.hidden = geminiHasKey;
   dom.geminiClearBtn.disabled = geminiBusy || !geminiHasKey;
   dom.geminiClearBtn.hidden = !geminiHasKey;
+
+  // --- AI provider selection ---
+  const aiProviderBusy = controllers.aiProviderController.isBusy();
+  dom.aiProviderSelect.disabled = aiProviderBusy;
+
+  // --- LocalAI settings ---
+  const localAiBusy = controllers.localAiController.isBusy();
+  dom.localAiBaseUrlInput.disabled = localAiBusy;
+  dom.localAiTextModelInput.disabled = localAiBusy;
+  dom.localAiTranscriptionModelInput.disabled = localAiBusy;
+  dom.localAiApiKeyInput.disabled = localAiBusy;
+  dom.localAiContextLimitInput.disabled = localAiBusy;
+  dom.localAiSaveBtn.disabled =
+    localAiBusy ||
+    dom.localAiBaseUrlInput.value.trim().length === 0 ||
+    dom.localAiTextModelInput.value.trim().length === 0 ||
+    dom.localAiTranscriptionModelInput.value.trim().length === 0;
+  dom.localAiResetBtn.disabled = localAiBusy;
 }

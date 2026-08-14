@@ -5,11 +5,11 @@
 #include <new>
 #include <string>
 
+#include "ai_service.h"
 #include "esp_log.h"
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "gemini_service.h"
 
 namespace transcription_service {
 namespace {
@@ -36,7 +36,7 @@ Snapshot BuildSnapshotLocked()
 {
     Snapshot snapshot = {};
     snapshot.initialized = s_initialized;
-    snapshot.provider_ready = gemini_service::GetSnapshot().runtime.ready;
+    snapshot.provider_ready = ai_service::GetSnapshot().runtime.ready;
     snapshot.request_in_flight = s_request_in_flight;
     snapshot.last_http_status = s_last_http_status;
     snapshot.last_status_message = s_last_status_message;
@@ -59,8 +59,8 @@ void NotifyLocked()
     handler(event, context);
 }
 
-// Runs the (blocking) Gemini audio transcription and publishes the result. The Gemini HTTP now
-// lives in gemini_service::Transcribe; this service owns the async lifecycle + snapshot/events.
+// Runs the (blocking) AI-provider audio transcription and publishes the result. The provider
+// HTTP now lives in ai_service::Transcribe; this service owns the async lifecycle + snapshot/events.
 void WorkerTask(void* raw_context)
 {
     std::unique_ptr<TaskContext> context(static_cast<TaskContext*>(raw_context));
@@ -77,7 +77,7 @@ void WorkerTask(void* raw_context)
         return;
     }
 
-    const gemini_service::TranscriptionResult result = gemini_service::Transcribe(*context->clip);
+    const ai_service::TranscriptionResult result = ai_service::Transcribe(*context->clip);
 
     {
         std::lock_guard<std::mutex> lock(s_mutex);
@@ -89,20 +89,18 @@ void WorkerTask(void* raw_context)
             s_last_error_message.clear();
             s_last_transcript = result.transcript;
             ESP_LOGI(kTag,
-                     "Gemini transcription succeeded: chars=%u wav_bytes=%u clip_ms=%u "
-                     "upload_chunks=%u upload_elapsed_ms=%llu total_elapsed_ms=%llu",
+                     "AI transcription succeeded: chars=%u wav_bytes=%u clip_ms=%u "
+                     "elapsed_ms=%llu",
                      static_cast<unsigned>(s_last_transcript.size()),
                      static_cast<unsigned>(result.wav_bytes),
                      static_cast<unsigned>(result.clip_duration_ms),
-                     static_cast<unsigned>(result.upload_chunk_count),
-                     static_cast<unsigned long long>(result.upload_elapsed_ms),
                      static_cast<unsigned long long>(result.total_elapsed_ms));
         } else {
             s_last_status_message = "Transcription failed";
             s_last_error_code = result.error_code;
             s_last_error_message = result.error_message;
             s_last_transcript.clear();
-            ESP_LOGW(kTag, "Gemini transcription failed: http=%d code=%s message=%s",
+            ESP_LOGW(kTag, "AI transcription failed: http=%d code=%s message=%s",
                      result.http_status, s_last_error_code.c_str(), s_last_error_message.c_str());
         }
         NotifyLocked();
@@ -123,9 +121,9 @@ esp_err_t Init()
     s_initialized = true;
     s_request_in_flight = false;
     s_last_http_status = 0;
-    s_last_status_message = gemini_service::GetSnapshot().runtime.ready
-                                ? "Gemini ready for transcription"
-                                : "Gemini transcription unavailable";
+    s_last_status_message = ai_service::GetSnapshot().runtime.ready
+                                ? "AI provider ready for transcription"
+                                : "AI provider transcription unavailable";
     s_last_error_code.clear();
     s_last_error_message.clear();
     s_last_transcript.clear();
@@ -151,8 +149,8 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
         return false;
     }
 
-    const gemini_service::Snapshot gemini_snapshot = gemini_service::GetSnapshot();
-    const std::string api_key = gemini_service::GetEffectiveApiKey();
+    const ai_service::Snapshot ai_snapshot = ai_service::GetSnapshot();
+    const bool provider_configured = ai_service::IsConfigured();
 
     {
         std::lock_guard<std::mutex> lock(s_mutex);
@@ -163,14 +161,13 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
             NotifyLocked();
             return false;
         }
-        if (!gemini_snapshot.runtime.ready || api_key.empty()) {
+        if (!ai_snapshot.runtime.ready || !provider_configured) {
             s_last_http_status = 0;
             s_last_status_message = "Transcription unavailable";
-            s_last_error_code = gemini_snapshot.settings.configured ? "provider_not_ready"
-                                                                    : "not_configured";
-            s_last_error_message = gemini_snapshot.settings.configured
-                                       ? "Gemini is not ready yet"
-                                       : "No Gemini API key configured";
+            s_last_error_code = provider_configured ? "provider_not_ready" : "not_configured";
+            s_last_error_message = provider_configured
+                                       ? "AI provider is not ready yet"
+                                       : "No AI provider is configured";
             s_last_transcript.clear();
             NotifyLocked();
             return false;
@@ -209,7 +206,7 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
     TaskHandle_t task = nullptr;
     const BaseType_t created = xTaskCreatePinnedToCore(
         WorkerTask, "transcription", kWorkerTaskStackWords, task_context,
-        followup_task_config::kPriorityGemini, &task, followup_task_config::kSystemCore);
+        followup_task_config::kPriorityAiProvider, &task, followup_task_config::kSystemCore);
     if (created != pdPASS) {
         delete task_context;
         std::lock_guard<std::mutex> lock(s_mutex);
@@ -221,7 +218,7 @@ bool BeginTranscription(recording_service::RecordedClipPtr clip)
         return false;
     }
 
-    ESP_LOGI(kTag, "Starting Gemini transcription: samples=%u",
+    ESP_LOGI(kTag, "Starting AI transcription: samples=%u",
              static_cast<unsigned>(task_context->clip->sample_count()));
     return true;
 }
